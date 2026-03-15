@@ -21,8 +21,8 @@ idfm_api_key = st.secrets.get("IDFM_API_KEY", None)
 
 if idfm_api_key:
     # --- LA VRAIE CONNEXION API ---
+# --- LA VRAIE CONNEXION API (AVEC FILTRAGE INTELLIGENT) ---
     try:
-        # L'endpoint officiel IDFM pour récupérer tous les incidents du Métro
         url_idfm = "https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/line_reports/physical_modes/physical_mode:Metro/line_reports?count=100"
         headers = {"apiKey": idfm_api_key}
         
@@ -31,20 +31,49 @@ if idfm_api_key:
             data = response.json()
             disruptions = data.get('disruptions', [])
             
-            if len(disruptions) == 0:
-                st.success("✅ Aucun incident majeur signalé sur le réseau Métro actuellement.")
+            alertes_majeures = []
+            alertes_mineures = []
+            
+            # Algorithme de tri et d'extraction de contexte
+            for d in disruptions:
+                severity = d.get('severity', {}).get('effect', 'UNKNOWN')
+                message = d.get('messages', [{'text': 'Perturbation en cours'}])[0]['text']
+                
+                # On ignore les pannes d'infrastructures mineures (ascenseurs, escalators)
+                if "ascenseur" in message.lower() or "mécanique" in message.lower() or "équipement" in message.lower():
+                    continue
+                
+                # On extrait le nom de la ligne touchée (Ex: "Métro 4")
+                lieu = "Ligne non précisée"
+                impacted = d.get('impacted_objects', [])
+                if impacted:
+                    pt_obj = impacted[0].get('pt_object', {})
+                    lieu = pt_obj.get('name', lieu)
+                
+                info = {"lieu": lieu, "message": message, "severity": severity}
+                
+                # On sépare les vraies pannes des simples travaux
+                if severity in ["NO_SERVICE", "REDUCED_SERVICE", "SIGNIFICANT_DELAYS"]:
+                    alertes_majeures.append(info)
+                elif severity != "UNKNOWN":
+                    alertes_mineures.append(info)
+            
+            # On regroupe en mettant les problèmes graves en haut de la liste
+            toutes_alertes = alertes_majeures + alertes_mineures
+            
+            if len(toutes_alertes) == 0:
+                st.success("✅ Trafic fluide : Aucune perturbation majeure signalée sur le réseau Métro.")
             else:
-                # On affiche les 2 perturbations les plus récentes
-                for d in disruptions[:2]: 
-                    severity = d.get('severity', {}).get('effect', 'UNKNOWN')
-                    message = d.get('messages', [{'text': 'Perturbation en cours'}])[0]['text']
+                # On affiche les 3 alertes les plus pertinentes
+                for alerte in toutes_alertes[:3]:
+                    texte = f"**{alerte['lieu']}** : {alerte['message']}"
                     
-                    if severity == "NO_SERVICE":
-                        st.error(f"🔴 **Interruption :** {message}")
-                    elif severity == "REDUCED_SERVICE":
-                        st.warning(f"🟠 **Perturbation :** {message}")
+                    if alerte['severity'] == "NO_SERVICE":
+                        st.error(f"🔴 **Trafic Interrompu** | {texte}")
+                    elif alerte['severity'] in ["REDUCED_SERVICE", "SIGNIFICANT_DELAYS"]:
+                        st.warning(f"🟠 **Trafic Perturbé** | {texte}")
                     else:
-                        st.info(f"🔵 **Information :** {message}")
+                        st.info(f"🔵 **Information** | {texte}")
         else:
             st.warning(f"⚠️ Impossible de joindre les serveurs RATP (Code {response.status_code}).")
     except Exception as e:
