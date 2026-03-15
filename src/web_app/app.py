@@ -89,7 +89,7 @@ else:
             colonnes_modele = ['heure', 'jour_semaine', 'mois', 'pm25_H-1', 'pm25_H-24']
             predictions_passees = model.predict(df_valide[colonnes_modele])
             fig.add_trace(go.Scatter(x=df_valide['timestamp'], y=predictions_passees, 
-                                     mode='lines', name='Ce que prédisait l\'IA', line=dict(color='green', dash='dot')))
+                                     mode='lines', name='Prédiction passée du modèle IA', line=dict(color='green', dash='dot')))
         
         # 3. Le point du Futur (Rouge)
         fig.add_trace(go.Scatter(x=[latest['timestamp'], next_hour_dt], y=[latest['pm2_5'], pred_value], 
