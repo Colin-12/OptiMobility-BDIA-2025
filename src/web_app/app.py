@@ -11,9 +11,54 @@ st.set_page_config(page_title="OptiMobility - Smart City", page_icon="🌍", lay
 st.title(" OptiMobility : Éco-Mobilité & Prédiction (Paris)")
 st.markdown("Ce tableau de bord fusionne l'IA, l'Open Data de la Ville de Paris et l'état du trafic pour optimiser vos déplacements.")
 
-# --- MODULE 3 : INFO TRAFIC RATP (Bandeau d'alerte) ---
-st.error(" **Info Trafic RATP en direct :** Trafic perturbé sur la Ligne 4 (Bagage abandonné) et la Ligne B (Panne électrique). Prévoyez des itinéraires de substitution.")
 
+# --- MODULE 3 : INFO TRAFIC (API OFFICIELLE IDFM) ---
+st.markdown("---")
+st.subheader("Info Trafic Métro (Temps Réel)")
+
+# On cherche la clé API dans les secrets Streamlit
+idfm_api_key = st.secrets.get("IDFM_API_KEY", None)
+
+if idfm_api_key:
+    # --- LA VRAIE CONNEXION API ---
+    try:
+        # L'endpoint officiel IDFM pour récupérer tous les incidents du Métro
+        url_idfm = "https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/line_reports/physical_modes/physical_mode:Metro/line_reports?count=100"
+        headers = {"apiKey": idfm_api_key}
+        
+        response = requests.get(url_idfm, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            disruptions = data.get('disruptions', [])
+            
+            if len(disruptions) == 0:
+                st.success("✅ Aucun incident majeur signalé sur le réseau Métro actuellement.")
+            else:
+                # On affiche les 2 perturbations les plus récentes
+                for d in disruptions[:2]: 
+                    severity = d.get('severity', {}).get('effect', 'UNKNOWN')
+                    message = d.get('messages', [{'text': 'Perturbation en cours'}])[0]['text']
+                    
+                    if severity == "NO_SERVICE":
+                        st.error(f"🔴 **Interruption :** {message}")
+                    elif severity == "REDUCED_SERVICE":
+                        st.warning(f"🟠 **Perturbation :** {message}")
+                    else:
+                        st.info(f"🔵 **Information :** {message}")
+        else:
+            st.warning(f"⚠️ Impossible de joindre les serveurs RATP (Code {response.status_code}).")
+    except Exception as e:
+        st.error(f"❌ Erreur lors de la récupération du trafic : {e}")
+
+else:
+    # --- LE MODE "DÉMO" (Si tu n'as pas encore créé de compte PRIM) ---
+    st.info("💡 *Note : L'affichage en direct des alertes RATP nécessite l'ajout d'une clé API gratuite 'PRIM' dans les secrets de l'application. Affichage de démonstration ci-dessous :*")
+    
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        st.error("🔴 **Ligne 4** : Trafic interrompu entre Montparnasse et Châtelet (Bagage abandonné). Reprise estimée à 14h30.")
+    with col_t2:
+        st.warning("🟠 **Ligne 13** : Trafic fortement ralenti sur l'ensemble de la ligne (Panne de signalisation).")
 # --- CONNEXION À LA BASE DE DONNÉES ---
 @st.cache_resource
 def init_connection():
