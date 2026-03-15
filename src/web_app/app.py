@@ -36,7 +36,7 @@ if df_recent.empty or len(df_recent) < 25:
     st.warning("⚠️ Pas assez de données dans la base pour faire une prédiction (25h requises).")
 else:
     # --- AFFICHAGE DES KPIS TEMPS RÉEL ---
-    st.subheader("📊 Situation Actuelle (Dernier relevé)")
+    st.subheader(" Situation Actuelle (Dernier relevé)")
     latest = df_recent.iloc[-1]
     
     col1, col2, col3, col4 = st.columns(4)
@@ -46,7 +46,7 @@ else:
     col4.metric("CO", f"{latest['co']:.2f} µg/m³")
 
     # --- PRÉDICTION AVEC LE MODÈLE XGBOOST ---
-    st.subheader("🤖 Prédiction de l'IA (Prochaine heure)")
+    st.subheader(" Prédiction de l'IA (Prochaine heure)")
     
     model_path = os.path.join(os.path.dirname(__file__), '../models/modele_pollution_xgb.pkl')
     
@@ -65,7 +65,7 @@ else:
         }])
         
         pred_value = model.predict(features)[0]
-        st.success(f"🔮 Concentration PM2.5 prévue pour la prochaine heure : **{pred_value:.2f} µg/m³**")
+        st.success(f" Concentration PM2.5 prévue pour la prochaine heure : **{pred_value:.2f} µg/m³**")
         
         # --- PRÉPARATION DES PRÉDICTIONS HISTORIQUES (BACKTESTING) ---
         df_historique = df_recent.copy()
