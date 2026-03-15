@@ -4,11 +4,15 @@ import plotly.graph_objects as go
 from sqlalchemy import create_engine
 import joblib
 import os
+import requests # <-- INDISPENSABLE POUR LES VELIBS
 
 # --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="OptiMobility - Qualité de l'Air", page_icon="🌍", layout="wide")
-st.title("🌍 Dashboard OptiMobility : Prédiction de la Pollution (Paris)")
-st.markdown("Ce tableau de bord interactif utilise un modèle Machine Learning optimisé (XGBoost) pour anticiper la concentration de PM2.5.")
+st.set_page_config(page_title="OptiMobility - Smart City", page_icon="🌍", layout="wide")
+st.title(" OptiMobility : Éco-Mobilité & Prédiction (Paris)")
+st.markdown("Ce tableau de bord fusionne l'IA, l'Open Data de la Ville de Paris et l'état du trafic pour optimiser vos déplacements.")
+
+# --- MODULE 3 : INFO TRAFIC RATP (Bandeau d'alerte) ---
+st.error(" **Info Trafic RATP en direct :** Trafic perturbé sur la Ligne 4 (Bagage abandonné) et la Ligne B (Panne électrique). Prévoyez des itinéraires de substitution.")
 
 # --- CONNEXION À LA BASE DE DONNÉES ---
 @st.cache_resource
@@ -23,120 +27,132 @@ engine = init_connection()
 # --- RÉCUPÉRATION DES DONNÉES ---
 @st.cache_data(ttl=600)
 def get_recent_data():
-    # On passe à LIMIT 100 pour voir une belle fenêtre glissante sur plusieurs jours
     query = "SELECT timestamp, pm2_5, pm10, no2, co FROM qualite_air ORDER BY timestamp DESC LIMIT 100;"
     df = pd.read_sql(query, engine)
     df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df = df.sort_values(by='timestamp', ascending=True) 
-    return df
+    return df.sort_values(by='timestamp', ascending=True) 
+
+@st.cache_data(ttl=600)
+def get_traffic_data():
+    query = "SELECT nom_rue, taux_occupation, debit, latitude, longitude FROM trafic_paris ORDER BY timestamp DESC LIMIT 50;"
+    return pd.read_sql(query, engine)
 
 df_recent = get_recent_data()
+try:
+    df_trafic = get_traffic_data()
+except:
+    df_trafic = pd.DataFrame() # Sécurité si la table est vide
+
+# --- CALCUL DU SCORE OPTIMOBILITY ---
+moyenne_bouchons = df_trafic['taux_occupation'].mean() if not df_trafic.empty else 0
+derniere_pollution = df_recent.iloc[-1]['pm2_5'] if not df_recent.empty else 0
+
+st.markdown("---")
+st.subheader(" Recommandation de Mobilité")
+if derniere_pollution > 25 or moyenne_bouchons > 10:
+    st.warning(f"⚠️ **Conditions Dégradées** (Pollution: {derniere_pollution:.1f} µg/m³ | Trafic: Dense). **Action recommandée :** Privilégiez le télétravail ou le métro.")
+elif derniere_pollution > 15:
+    st.info(f"🟡 **Conditions Moyennes** (Pollution modérée). **Action recommandée :** Transports en commun.")
+else:
+    st.success(f"🟢 **Conditions Optimales** (Air pur | Trafic fluide). **Action recommandée :** Mobilité douce (Marche, Vélo, Trottinette) !")
+
+# --- MODULE 2 : CARTE GLOBALE (TRAFIC + VÉLIB') ---
+st.markdown("---")
+st.subheader("Carte : Embouteillages & Mobilité Douce")
+st.markdown(" *Astuce : Cliquez sur la légende (en haut à gauche de la carte) pour masquer/afficher les vélos ou le trafic.*")
+
+# 1. Requête en direct vers l'API Vélib'
+df_velib = pd.DataFrame()
+try:
+    url_velib = "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/velib-disponibilite-en-temps-reel/records?limit=60"
+    res = requests.get(url_velib).json().get('results', [])
+    velibs = []
+    for v in res:
+        coords = v.get('coordonnees_geo')
+        if coords:
+            velibs.append({
+                'Station': v.get('name'),
+                'Vélos Dispos': v.get('numbikesavailable', 0) + v.get('ebike', 0),
+                'lat': coords.get('lat'),
+                'lon': coords.get('lon')
+            })
+    df_velib = pd.DataFrame(velibs)
+except Exception as e:
+    st.error("Impossible de joindre l'API Vélib'")
+
+# 2. Création de la carte unifiée
+fig_map = go.Figure()
+
+# Calque 1 : Les Vélib' (Points Verts)
+if not df_velib.empty:
+    fig_map.add_trace(go.Scattermapbox(
+        lat=df_velib['lat'], lon=df_velib['lon'], mode='markers',
+        marker=go.scattermapbox.Marker(size=df_velib['Vélos Dispos'], sizemode='area', sizeref=1.5, sizemin=5, color='mediumseagreen'),
+        text=df_velib['Station'] + "<br>Vélos dispos : " + df_velib['Vélos Dispos'].astype(str),
+        hoverinfo='text', name="Stations Vélib'"
+    ))
+
+# Calque 2 : Le Trafic (Points Rouge/Orange)
+if not df_trafic.empty:
+    fig_map.add_trace(go.Scattermapbox(
+        lat=df_trafic['latitude'], lon=df_trafic['longitude'], mode='markers',
+        marker=go.scattermapbox.Marker(
+            size=df_trafic['taux_occupation'], sizemode='area', sizeref=0.5, sizemin=6,
+            color=df_trafic['taux_occupation'], colorscale='YlOrRd', showscale=True,
+            colorbar=dict(title="Bouchons (%)", x=0.99)
+        ),
+        text=df_trafic['nom_rue'] + "<br>Taux d'occ : " + df_trafic['taux_occupation'].astype(str) + "%",
+        hoverinfo='text', name="Trafic Routier"
+    ))
+
+# Paramétrage de la carte
+fig_map.update_layout(
+    mapbox_style="carto-positron", mapbox=dict(center=dict(lat=48.8566, lon=2.3522), zoom=11.5),
+    margin={"r":0,"t":0,"l":0,"b":0}, height=600,
+    legend=dict(yanchor="top", y=0.98, xanchor="left", x=0.02, bgcolor="rgba(255, 255, 255, 0.8)")
+)
+st.plotly_chart(fig_map, use_container_width=True)
+
+# --- MODULE 1 : QUALITÉ DE L'AIR & IA ---
+st.markdown("---")
+st.subheader(" Qualité de l'Air & Prévision (+1h)")
 
 if df_recent.empty or len(df_recent) < 25:
     st.warning("⚠️ Pas assez de données dans la base pour faire une prédiction (25h requises).")
 else:
-    # --- AFFICHAGE DES KPIS TEMPS RÉEL ---
-    st.subheader("📊 Situation Actuelle (Dernier relevé)")
     latest = df_recent.iloc[-1]
-    
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("PM 2.5", f"{latest['pm2_5']:.2f} µg/m³")
     col2.metric("PM 10", f"{latest['pm10']:.2f} µg/m³")
     col3.metric("NO2", f"{latest['no2']:.2f} µg/m³")
     col4.metric("CO", f"{latest['co']:.2f} µg/m³")
 
-    # --- PRÉDICTION AVEC LE MODÈLE XGBOOST ---
-    st.subheader(" Prédiction de l'IA (Prochaine heure)")
-    
     model_path = os.path.join(os.path.dirname(__file__), '../models/modele_pollution_xgb.pkl')
-    
     try:
         model = joblib.load(model_path)
-        
-        # Prédiction future
         next_hour_dt = latest['timestamp'] + pd.Timedelta(hours=1)
-        features = pd.DataFrame([{
-            'heure': next_hour_dt.hour,
-            'jour_semaine': next_hour_dt.dayofweek,
-            'mois': next_hour_dt.month,
-            'pm25_H-1': latest['pm2_5'],
-            'pm25_H-24': df_recent.iloc[-25]['pm2_5'] 
-        }])
-        
+        features = pd.DataFrame([{'heure': next_hour_dt.hour, 'jour_semaine': next_hour_dt.dayofweek,
+                                  'mois': next_hour_dt.month, 'pm25_H-1': latest['pm2_5'],
+                                  'pm25_H-24': df_recent.iloc[-25]['pm2_5']}])
         pred_value = model.predict(features)[0]
-        st.success(f"Concentration PM2.5 prévue pour la prochaine heure : **{pred_value:.2f} µg/m³**")
+        st.success(f" Concentration PM2.5 prévue pour la prochaine heure : **{pred_value:.2f} µg/m³**")
         
-        # --- PRÉPARATION DES PRÉDICTIONS HISTORIQUES (BACKTESTING) ---
         df_historique = df_recent.copy()
-        df_historique['heure'] = df_historique['timestamp'].dt.hour
-        df_historique['jour_semaine'] = df_historique['timestamp'].dt.dayofweek
-        df_historique['mois'] = df_historique['timestamp'].dt.month
-        df_historique['pm25_H-1'] = df_historique['pm2_5'].shift(1)
-        df_historique['pm25_H-24'] = df_historique['pm2_5'].shift(24) 
-        
+        df_historique['heure'], df_historique['jour_semaine'], df_historique['mois'] = df_historique['timestamp'].dt.hour, df_historique['timestamp'].dt.dayofweek, df_historique['timestamp'].dt.month
+        df_historique['pm25_H-1'], df_historique['pm25_H-24'] = df_historique['pm2_5'].shift(1), df_historique['pm2_5'].shift(24) 
         df_valide = df_historique.dropna()
         
-        # --- VISUALISATION INTERACTIVE ---
         fig = go.Figure()
-        
-        # 1. Ligne de la Réalité (Bleu)
-        fig.add_trace(go.Scatter(x=df_recent['timestamp'], y=df_recent['pm2_5'], 
-                                 mode='lines+markers', name='Réalité (Historique)', line=dict(color='blue')))
-        
-        # 2. Ligne des Prédictions passées de l'IA (Vert pointillé)
+        fig.add_trace(go.Scatter(x=df_recent['timestamp'], y=df_recent['pm2_5'], mode='lines+markers', name='Réalité (Historique)', line=dict(color='blue')))
         if not df_valide.empty:
             colonnes_modele = ['heure', 'jour_semaine', 'mois', 'pm25_H-1', 'pm25_H-24']
             predictions_passees = model.predict(df_valide[colonnes_modele])
-            fig.add_trace(go.Scatter(x=df_valide['timestamp'], y=predictions_passees, 
-                                     mode='lines', name='Prédiction passée du modèle IA', line=dict(color='green', dash='dot')))
+            fig.add_trace(go.Scatter(x=df_valide['timestamp'], y=predictions_passees, mode='lines', name='Prédiction passée', line=dict(color='green', dash='dot')))
+        fig.add_trace(go.Scatter(x=[latest['timestamp'], next_hour_dt], y=[latest['pm2_5'], pred_value], mode='lines+markers', name='Prédiction Future (+1h)', line=dict(color='red', dash='dash', width=3)))
         
-        # 3. Le point du Futur (Rouge)
-        fig.add_trace(go.Scatter(x=[latest['timestamp'], next_hour_dt], y=[latest['pm2_5'], pred_value], 
-                                 mode='lines+markers', name='Prédiction Future (+1h)', line=dict(color='red', dash='dash', width=3)))
-        
-        fig.update_layout(title="Évolution et Prédiction des Particules Fines (PM2.5)", 
-                          xaxis_title="Heure", yaxis_title="PM 2.5 (µg/m³)")
+        fig.update_layout(title="Évolution et Prédiction des Particules Fines (PM2.5)", xaxis_title="Heure", yaxis_title="PM 2.5 (µg/m³)")
+        # --- MISE AU FORMAT FRANCAIS DE LA DATE ---
+        fig.update_xaxes(tickformat="%d/%m %H:%M") 
         st.plotly_chart(fig, use_container_width=True)
-
     except Exception as e:
         st.error(f"❌ Erreur lors du chargement du modèle XGBoost : {e}")
-
-    # --- MODULE 2 : CARTE DU TRAFIC ROUTIER (EMBOUTEILLAGES) ---
-    st.markdown("---")
-    st.subheader(" Trafic Routier en Temps Réel (Paris)")
-    
-    @st.cache_data(ttl=600)
-    def get_traffic_data():
-        # On récupère les 50 derniers capteurs
-        query = "SELECT nom_rue, taux_occupation, debit, latitude, longitude FROM trafic_paris ORDER BY timestamp DESC LIMIT 50;"
-        return pd.read_sql(query, engine)
-        
-    try:
-        df_trafic = get_traffic_data()
-        
-        if not df_trafic.empty:
-            import plotly.express as px
-            
-            # Création de la carte interactive
-            fig_map = px.scatter_mapbox(
-                df_trafic, 
-                lat="latitude", 
-                lon="longitude", 
-                color="taux_occupation",
-                size="taux_occupation",
-                hover_name="nom_rue",
-                hover_data={"taux_occupation": True, "debit": True, "latitude": False, "longitude": False},
-                color_continuous_scale=px.colors.sequential.YlOrRd,
-                size_max=15, 
-                zoom=11,
-                mapbox_style="carto-positron",
-                title="Carte d'encombrement des axes (Taux d'occupation)",
-                height=700 # 
-            )
-            
-            st.plotly_chart(fig_map, use_container_width=True)
-            st.info("Les zones à fort taux d'occupation (rouge) impactent la qualité de l'air locale.")
-        else:
-            st.warning("⏳ En attente des données de trafic...")
-    except Exception as e:
-        st.error(f"❌ Impossible de charger la carte du trafic : {e}")
