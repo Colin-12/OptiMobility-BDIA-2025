@@ -46,7 +46,7 @@ else:
     col4.metric("CO", f"{latest['co']:.2f} µg/m³")
 
     # --- PRÉDICTION AVEC LE MODÈLE XGBOOST ---
-    st.subheader("🤖 Prédiction de l'IA (Prochaine heure)")
+    st.subheader(" Prédiction de l'IA (Prochaine heure)")
     
     model_path = os.path.join(os.path.dirname(__file__), '../models/modele_pollution_xgb.pkl')
     
@@ -64,7 +64,7 @@ else:
         }])
         
         pred_value = model.predict(features)[0]
-        st.success(f"🔮 Concentration PM2.5 prévue pour la prochaine heure : **{pred_value:.2f} µg/m³**")
+        st.success(f"Concentration PM2.5 prévue pour la prochaine heure : **{pred_value:.2f} µg/m³**")
         
         # --- PRÉPARATION DES PRÉDICTIONS HISTORIQUES (BACKTESTING) ---
         df_historique = df_recent.copy()
@@ -103,7 +103,7 @@ else:
 
     # --- MODULE 2 : CARTE DU TRAFIC ROUTIER (EMBOUTEILLAGES) ---
     st.markdown("---")
-    st.subheader("🚗 Trafic Routier en Temps Réel (Paris)")
+    st.subheader(" Trafic Routier en Temps Réel (Paris)")
     
     @st.cache_data(ttl=600)
     def get_traffic_data():
@@ -130,11 +130,12 @@ else:
                 size_max=15, 
                 zoom=11,
                 mapbox_style="carto-positron",
-                title="Carte d'encombrement des axes (Taux d'occupation)"
+                title="Carte d'encombrement des axes (Taux d'occupation)",
+                height=700 # 
             )
             
             st.plotly_chart(fig_map, use_container_width=True)
-            st.info("💡 Corrélation : Observez comment les zones à fort taux d'occupation (rouge) impactent la qualité de l'air locale.")
+            st.info("Les zones à fort taux d'occupation (rouge) impactent la qualité de l'air locale.")
         else:
             st.warning("⏳ En attente des données de trafic...")
     except Exception as e:
