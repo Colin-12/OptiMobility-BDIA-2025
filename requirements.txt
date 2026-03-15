@@ -6,4 +6,5 @@ psycopg2-binary
 streamlit>=1.32.0
 plotly
 scikit-learn
-tensorflow-cpu
+xgboost
+joblib
