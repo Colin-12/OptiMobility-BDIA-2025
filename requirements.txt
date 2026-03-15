@@ -1,4 +1,9 @@
-requests==2.31.0
-pandas==2.1.4
-SQLAlchemy==2.0.23
-psycopg2-binary==2.9.9
+requests
+pandas
+numpy
+SQLAlchemy
+psycopg2-binary
+streamlit
+plotly
+scikit-learn
+tensorflow-cpu
