@@ -1,0 +1,50 @@
+# =========================
+# 1. Sécurité et Identifiants
+# =========================
+# Ne JAMAIS envoyer vos clés API, mots de passe de BDD ou secrets
+.env
+.env.local
+secrets.toml
+credentials.json
+
+# =========================
+# 2. Données et Modèles (Big Data & IA)
+# =========================
+# GitHub n'est pas fait pour stocker de la donnée lourde
+*.csv
+*.tsv
+*.json
+*.parquet
+*.h5
+*.pkl
+*.model
+# Ignorer le contenu des dossiers de données, sauf d'éventuels petits fichiers d'exemple
+data/*
+!data/sample_data.csv 
+
+# =========================
+# 3. Environnements Python & Data Science
+# =========================
+# Dossiers d'environnements virtuels
+venv/
+.venv/
+env/
+# Fichiers de cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+# Fichiers temporaires des Notebooks Jupyter
+.ipynb_checkpoints/
+
+# =========================
+# 4. Développement Web (Si vous utilisez React.js)
+# =========================
+node_modules/
+build/
+dist/
+
+# =========================
+# 5. Fichiers système (Mac/Windows)
+# =========================
+.DS_Store
+Thumbs.db
