@@ -3,7 +3,7 @@ pandas
 numpy
 SQLAlchemy
 psycopg2-binary
-streamlit
+streamlit>=1.32.0
 plotly
 scikit-learn
 tensorflow-cpu
