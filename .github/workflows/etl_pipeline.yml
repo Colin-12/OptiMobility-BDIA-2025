@@ -1,31 +1,32 @@
 name: Extraction Pollution (ETL)
 
-# Quand ce script doit-il s'exécuter ?
 on:
   schedule:
-    - cron: '0 * * * *' # Toutes les heures (à la minute 0)
-  workflow_dispatch: # Permet aussi de lancer le script manuellement avec un bouton
+    - cron: '0 * * * *' 
+  workflow_dispatch: 
 
 jobs:
   run-etl:
-    runs-on: ubuntu-latest # On utilise un serveur Linux gratuit
+    runs-on: ubuntu-latest 
+    
+    # --- LA MODIFICATION EST LÀ 👇 ---
+    # Cela force GitHub à utiliser la version du futur (Node.js 24) dès maintenant
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    # --------------------------------
 
     steps:
-      # 1. Récupérer le code de votre dépôt
       - name: Checkout du code
         uses: actions/checkout@v4
 
-      # 2. Installer Python
       - name: Configuration de Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # 3. Installer les dépendances (Pandas, etc.)
       - name: Installation des dépendances
         run: pip install -r requirements.txt
 
-      # 4. Lancer le script avec les secrets
       - name: Exécution du script ETL
         env:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
