@@ -71,11 +71,39 @@ else:
         st.success(f"Concentration PM2.5 prévue pour la prochaine heure : **{pred_value:.2f} µg/m³**")
         
         # --- VISUALISATION INTERACTIVE ---
+        # --- PRÉPARATION DES PRÉDICTIONS HISTORIQUES (BACKTESTING) ---
+        # On crée une copie pour ne pas abîmer nos données
+        df_historique = df_recent.copy()
+        
+        # On recrée les variables (Feature Engineering) pour tout le tableau
+        df_historique['heure'] = df_historique['timestamp'].dt.hour
+        df_historique['jour_semaine'] = df_historique['timestamp'].dt.dayofweek
+        df_historique['mois'] = df_historique['timestamp'].dt.month
+        df_historique['pm25_H-1'] = df_historique['pm2_5'].shift(1)
+        # On triche un peu pour le H-24 sur un petit tableau, on utilise le shift(24)
+        df_historique['pm25_H-24'] = df_historique['pm2_5'].shift(24) 
+        
+        # On retire les lignes où il manque l'historique (les 24 premières heures)
+        df_valide = df_historique.dropna()
+        
+        # --- VISUALISATION INTERACTIVE ---
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_recent['timestamp'], y=df_recent['pm2_5'], mode='lines+markers', name='Historique PM2.5', line=dict(color='blue')))
-        fig.add_trace(go.Scatter(x=[latest['timestamp'], next_hour_dt], y=[latest['pm2_5'], pred_value], mode='lines+markers', name='Prédiction IA', line=dict(color='red', dash='dash')))
-        fig.update_layout(title="Évolution et Prédiction des Particules Fines", xaxis_title="Heure", yaxis_title="PM 2.5 (µg/m³)")
+        
+        # 1. Ligne de la Réalité (Bleu)
+        fig.add_trace(go.Scatter(x=df_recent['timestamp'], y=df_recent['pm2_5'], 
+                                 mode='lines+markers', name='Réalité (Historique)', line=dict(color='blue')))
+        
+        # 2. Ligne des Prédictions passées de l'IA (Vert pointillé)
+        if not df_valide.empty:
+            colonnes_modele = ['heure', 'jour_semaine', 'mois', 'pm25_H-1', 'pm25_H-24']
+            predictions_passees = model.predict(df_valide[colonnes_modele])
+            fig.add_trace(go.Scatter(x=df_valide['timestamp'], y=predictions_passees, 
+                                     mode='lines', name='Ce que prédisait l\'IA', line=dict(color='green', dash='dot')))
+        
+        # 3. Le point du Futur (Rouge)
+        fig.add_trace(go.Scatter(x=[latest['timestamp'], next_hour_dt], y=[latest['pm2_5'], pred_value], 
+                                 mode='lines+markers', name='Prédiction Future (+1h)', line=dict(color='red', dash='dash', width=3)))
+        
+        fig.update_layout(title="Évolution et Prédiction des Particules Fines (PM2.5)", 
+                          xaxis_title="Heure", yaxis_title="PM 2.5 (µg/m³)")
         st.plotly_chart(fig, use_container_width=True)
-
-    except Exception as e:
-        st.error(f"❌ Erreur lors du chargement du modèle XGBoost : {e}")
