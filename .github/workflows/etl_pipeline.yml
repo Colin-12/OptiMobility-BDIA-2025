@@ -1,4 +1,4 @@
-name: Extraction Pollution (ETL)
+name: Extraction Pollution et Trafic (ETL)
 
 on:
   schedule:
@@ -24,8 +24,13 @@ jobs:
       - name: Installation des dépendances
         run: pip install -r requirements.txt
 
-      - name: Exécution du script ETL
+      - name: Exécution du script ETL (Météo & Pollution)
         env:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
           SUPABASE_URI: ${{ secrets.SUPABASE_URI }}
         run: python src/data_engineering/fetch_weather.py
+
+      - name: Exécution du script ETL (Trafic Routier)
+        env:
+          SUPABASE_URI: ${{ secrets.SUPABASE_URI }}
+        run: python src/data/extract_traffic.py
