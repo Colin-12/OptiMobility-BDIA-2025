@@ -1,6 +1,6 @@
 requests
 pandas
-numpy
+numpy<2.0.0
 SQLAlchemy
 psycopg2-binary
 streamlit>=1.32.0
