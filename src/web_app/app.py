@@ -101,3 +101,43 @@ else:
 
     except Exception as e: # ET VOICI LE BLOC EXCEPT SAUVEUR !
         st.error(f"❌ Erreur lors du chargement du modèle XGBoost : {e}")
+
+
+    # --- MODULE 2 : CARTE DU TRAFIC ROUTIER (EMBOUTEILLAGES) ---
+        st.markdown("---")
+        st.subheader("🚗 Trafic Routier en Temps Réel (Paris)")
+        
+        @st.cache_data(ttl=600)
+        def get_traffic_data():
+            # On récupère les 50 derniers capteurs
+            query = "SELECT nom_rue, taux_occupation, debit, latitude, longitude FROM trafic_paris ORDER BY timestamp DESC LIMIT 50;"
+            return pd.read_sql(query, engine)
+            
+        try:
+            df_trafic = get_traffic_data()
+            
+            if not df_trafic.empty:
+                import plotly.express as px
+                
+                # Création de la carte interactive
+                fig_map = px.scatter_mapbox(
+                    df_trafic, 
+                    lat="latitude", 
+                    lon="longitude", 
+                    color="taux_occupation",
+                    size="taux_occupation",
+                    hover_name="nom_rue",
+                    hover_data={"taux_occupation": True, "debit": True, "latitude": False, "longitude": False},
+                    color_continuous_scale=px.colors.sequential.YlOrRd,
+                    size_max=15, 
+                    zoom=11,
+                    mapbox_style="carto-positron",
+                    title="Carte d'encombrement des axes (Taux d'occupation)"
+                )
+                
+                st.plotly_chart(fig_map, use_container_width=True)
+                st.info("💡 Corrélation : Observez comment les zones à fort taux d'occupation (rouge) impactent la qualité de l'air locale.")
+            else:
+                st.warning("⏳ En attente des données de trafic...")
+        except Exception as e:
+            st.error(f"❌ Impossible de charger la carte du trafic : {e}")
