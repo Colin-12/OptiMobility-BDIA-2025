@@ -5,15 +5,14 @@ on:
     - cron: '0 * * * *' 
   workflow_dispatch: 
 
+# --- ON PLACE LA VARIABLE ICI, TOUT EN HAUT ---
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+# ----------------------------------------------
+
 jobs:
   run-etl:
     runs-on: ubuntu-latest 
-    
-    # --- LA MODIFICATION EST LÀ 👇 ---
-    # Cela force GitHub à utiliser la version du futur (Node.js 24) dès maintenant
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    # --------------------------------
 
     steps:
       - name: Checkout du code
