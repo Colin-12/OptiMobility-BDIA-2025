@@ -36,7 +36,7 @@ if df_recent.empty or len(df_recent) < 25:
     st.warning("⚠️ Pas assez de données dans la base pour faire une prédiction (25h requises).")
 else:
     # --- AFFICHAGE DES KPIS TEMPS RÉEL ---
-    st.subheader(" Situation Actuelle (Dernier relevé)")
+    st.subheader("📊 Situation Actuelle (Dernier relevé)")
     latest = df_recent.iloc[-1]
     
     col1, col2, col3, col4 = st.columns(4)
@@ -46,11 +46,11 @@ else:
     col4.metric("CO", f"{latest['co']:.2f} µg/m³")
 
     # --- PRÉDICTION AVEC LE MODÈLE XGBOOST ---
-    st.subheader(" Prédiction de l'IA (Prochaine heure)")
+    st.subheader("🤖 Prédiction de l'IA (Prochaine heure)")
     
     model_path = os.path.join(os.path.dirname(__file__), '../models/modele_pollution_xgb.pkl')
     
-    try: # Le fameux bloc TRY commence ici
+    try:
         model = joblib.load(model_path)
         
         # Prédiction future
@@ -60,12 +60,11 @@ else:
             'jour_semaine': next_hour_dt.dayofweek,
             'mois': next_hour_dt.month,
             'pm25_H-1': latest['pm2_5'],
-            # On cherche la ligne d'il y a 24h (25ème en partant de la fin)
             'pm25_H-24': df_recent.iloc[-25]['pm2_5'] 
         }])
         
         pred_value = model.predict(features)[0]
-        st.success(f" Concentration PM2.5 prévue pour la prochaine heure : **{pred_value:.2f} µg/m³**")
+        st.success(f"🔮 Concentration PM2.5 prévue pour la prochaine heure : **{pred_value:.2f} µg/m³**")
         
         # --- PRÉPARATION DES PRÉDICTIONS HISTORIQUES (BACKTESTING) ---
         df_historique = df_recent.copy()
@@ -99,45 +98,44 @@ else:
                           xaxis_title="Heure", yaxis_title="PM 2.5 (µg/m³)")
         st.plotly_chart(fig, use_container_width=True)
 
-    except Exception as e: # ET VOICI LE BLOC EXCEPT SAUVEUR !
+    except Exception as e:
         st.error(f"❌ Erreur lors du chargement du modèle XGBoost : {e}")
 
-
     # --- MODULE 2 : CARTE DU TRAFIC ROUTIER (EMBOUTEILLAGES) ---
-        st.markdown("---")
-        st.subheader("🚗 Trafic Routier en Temps Réel (Paris)")
+    st.markdown("---")
+    st.subheader("🚗 Trafic Routier en Temps Réel (Paris)")
+    
+    @st.cache_data(ttl=600)
+    def get_traffic_data():
+        # On récupère les 50 derniers capteurs
+        query = "SELECT nom_rue, taux_occupation, debit, latitude, longitude FROM trafic_paris ORDER BY timestamp DESC LIMIT 50;"
+        return pd.read_sql(query, engine)
         
-        @st.cache_data(ttl=600)
-        def get_traffic_data():
-            # On récupère les 50 derniers capteurs
-            query = "SELECT nom_rue, taux_occupation, debit, latitude, longitude FROM trafic_paris ORDER BY timestamp DESC LIMIT 50;"
-            return pd.read_sql(query, engine)
+    try:
+        df_trafic = get_traffic_data()
+        
+        if not df_trafic.empty:
+            import plotly.express as px
             
-        try:
-            df_trafic = get_traffic_data()
+            # Création de la carte interactive
+            fig_map = px.scatter_mapbox(
+                df_trafic, 
+                lat="latitude", 
+                lon="longitude", 
+                color="taux_occupation",
+                size="taux_occupation",
+                hover_name="nom_rue",
+                hover_data={"taux_occupation": True, "debit": True, "latitude": False, "longitude": False},
+                color_continuous_scale=px.colors.sequential.YlOrRd,
+                size_max=15, 
+                zoom=11,
+                mapbox_style="carto-positron",
+                title="Carte d'encombrement des axes (Taux d'occupation)"
+            )
             
-            if not df_trafic.empty:
-                import plotly.express as px
-                
-                # Création de la carte interactive
-                fig_map = px.scatter_mapbox(
-                    df_trafic, 
-                    lat="latitude", 
-                    lon="longitude", 
-                    color="taux_occupation",
-                    size="taux_occupation",
-                    hover_name="nom_rue",
-                    hover_data={"taux_occupation": True, "debit": True, "latitude": False, "longitude": False},
-                    color_continuous_scale=px.colors.sequential.YlOrRd,
-                    size_max=15, 
-                    zoom=11,
-                    mapbox_style="carto-positron",
-                    title="Carte d'encombrement des axes (Taux d'occupation)"
-                )
-                
-                st.plotly_chart(fig_map, use_container_width=True)
-                st.info("💡 Corrélation : Observez comment les zones à fort taux d'occupation (rouge) impactent la qualité de l'air locale.")
-            else:
-                st.warning("⏳ En attente des données de trafic...")
-        except Exception as e:
-            st.error(f"❌ Impossible de charger la carte du trafic : {e}")
+            st.plotly_chart(fig_map, use_container_width=True)
+            st.info("💡 Corrélation : Observez comment les zones à fort taux d'occupation (rouge) impactent la qualité de l'air locale.")
+        else:
+            st.warning("⏳ En attente des données de trafic...")
+    except Exception as e:
+        st.error(f"❌ Impossible de charger la carte du trafic : {e}")
