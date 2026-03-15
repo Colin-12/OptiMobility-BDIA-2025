@@ -23,8 +23,8 @@ engine = init_connection()
 # --- RÉCUPÉRATION DES DONNÉES ---
 @st.cache_data(ttl=600)
 def get_recent_data():
-    # On récupère les 25 dernières heures (nécessaire pour calculer pm25_H-24)
-    query = "SELECT timestamp, pm2_5, pm10, no2, co FROM qualite_air ORDER BY timestamp DESC LIMIT 25;"
+    # On passe à LIMIT 100 pour voir une belle fenêtre glissante sur plusieurs jours
+    query = "SELECT timestamp, pm2_5, pm10, no2, co FROM qualite_air ORDER BY timestamp DESC LIMIT 100;"
     df = pd.read_sql(query, engine)
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     df = df.sort_values(by='timestamp', ascending=True) 
@@ -33,10 +33,10 @@ def get_recent_data():
 df_recent = get_recent_data()
 
 if df_recent.empty or len(df_recent) < 25:
-    st.warning("Pas assez de données dans la base pour faire une prédiction (25h requises).")
+    st.warning("⚠️ Pas assez de données dans la base pour faire une prédiction (25h requises).")
 else:
     # --- AFFICHAGE DES KPIS TEMPS RÉEL ---
-    st.subheader("Situation Actuelle (Dernier relevé)")
+    st.subheader("📊 Situation Actuelle (Dernier relevé)")
     latest = df_recent.iloc[-1]
     
     col1, col2, col3, col4 = st.columns(4)
@@ -46,44 +46,35 @@ else:
     col4.metric("CO", f"{latest['co']:.2f} µg/m³")
 
     # --- PRÉDICTION AVEC LE MODÈLE XGBOOST ---
-    st.subheader("Prédiction de l'IA (Prochaine heure)")
+    st.subheader("🤖 Prédiction de l'IA (Prochaine heure)")
     
-    # Chemin vers ton modèle XGBoost
     model_path = os.path.join(os.path.dirname(__file__), '../models/modele_pollution_xgb.pkl')
     
-    try:
+    try: # Le fameux bloc TRY commence ici
         model = joblib.load(model_path)
         
-        # Préparation des variables (Feature Engineering) exactement comme dans Colab
+        # Prédiction future
         next_hour_dt = latest['timestamp'] + pd.Timedelta(hours=1)
-        
         features = pd.DataFrame([{
             'heure': next_hour_dt.hour,
             'jour_semaine': next_hour_dt.dayofweek,
             'mois': next_hour_dt.month,
             'pm25_H-1': latest['pm2_5'],
-            'pm25_H-24': df_recent.iloc[0]['pm2_5'] # La valeur d'il y a 24h (index 0 sur 25 lignes)
+            # On cherche la ligne d'il y a 24h (25ème en partant de la fin)
+            'pm25_H-24': df_recent.iloc[-25]['pm2_5'] 
         }])
         
-        # Prédiction
         pred_value = model.predict(features)[0]
+        st.success(f"🔮 Concentration PM2.5 prévue pour la prochaine heure : **{pred_value:.2f} µg/m³**")
         
-        st.success(f"Concentration PM2.5 prévue pour la prochaine heure : **{pred_value:.2f} µg/m³**")
-        
-        # --- VISUALISATION INTERACTIVE ---
         # --- PRÉPARATION DES PRÉDICTIONS HISTORIQUES (BACKTESTING) ---
-        # On crée une copie pour ne pas abîmer nos données
         df_historique = df_recent.copy()
-        
-        # On recrée les variables (Feature Engineering) pour tout le tableau
         df_historique['heure'] = df_historique['timestamp'].dt.hour
         df_historique['jour_semaine'] = df_historique['timestamp'].dt.dayofweek
         df_historique['mois'] = df_historique['timestamp'].dt.month
         df_historique['pm25_H-1'] = df_historique['pm2_5'].shift(1)
-        # On triche un peu pour le H-24 sur un petit tableau, on utilise le shift(24)
         df_historique['pm25_H-24'] = df_historique['pm2_5'].shift(24) 
         
-        # On retire les lignes où il manque l'historique (les 24 premières heures)
         df_valide = df_historique.dropna()
         
         # --- VISUALISATION INTERACTIVE ---
@@ -107,3 +98,6 @@ else:
         fig.update_layout(title="Évolution et Prédiction des Particules Fines (PM2.5)", 
                           xaxis_title="Heure", yaxis_title="PM 2.5 (µg/m³)")
         st.plotly_chart(fig, use_container_width=True)
+
+    except Exception as e: # ET VOICI LE BLOC EXCEPT SAUVEUR !
+        st.error(f"❌ Erreur lors du chargement du modèle XGBoost : {e}")
